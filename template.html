@@ -1,0 +1,657 @@
+<!-- Pariazar github: https://github.com/pariazar -->
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <title>Elasticsearch Queries</title>
+    <link rel="stylesheet" href="./css/style.css">
+    <link rel="stylesheet" href="./css/prism.css">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/toastify-js/src/toastify.min.css">
+    <script src="./js/prism.js"></script>
+
+</head>
+
+<body>
+    <div class="container">
+        <nav class="menu">
+            <ul>
+                <li><a href="#simple-match-query">Simple Match Query</a></li>
+                <li><a href="#match-query-with-options">Match Query with Options</a></li>
+                <li><a href="#structure-of-bool-query">Structure of bool</a></li>
+                <li><a href="#match-phrase-query">Match phrase query</a></li>
+                <li><a href="#multi-match-query">Multi match query</a></li>
+                <li><a href="#working-with-array">Working with Array</a></li>
+            </ul>
+        </nav>
+        <div class="content">
+            <h1>Elasticsearch Queries</h1>
+            <p>Here you can find practical Elasticsearch queries on real data. Note that these queries
+                only used for educational purpose.</p>
+
+            <h3 id="simple-match-query">Simple Match Query</h3>
+
+            <p>This is a simple match query that only returns documents where the specified field matches the given text
+                value.</p>
+
+            <pre><code class="language-json query-code">
+GET /users/_search
+{
+"query": {
+    "match": {
+    "firstName": "Max"
+     }
+    }
+}
+        </code></pre>
+            <hr class="solid">
+
+            <h3 id="match-query-with-options">Match Query with Options</h3>
+
+            <p>You can use the match query with options to specify how the query should behave. For example, you can use
+                the <code>operator:OR</code> option to match documents containing either of the specified terms.</p>
+
+            <pre><code class="language-json query-code">
+GET /users/_search
+{
+"query": {
+    "match": {
+    "address": {
+        "query": "tehran london",
+        "operator": "or"
+    }
+    }
+}
+}
+        </code></pre>
+
+            <hr class="solid">
+
+            <code>use operator: and</code></br>The following query will match documents containing both tehran
+            <strong>AND</strong> london.
+
+            <pre><code class="language-json query-code">
+GET /users/_search
+{
+    "query": {
+    "match": {
+        "address": {
+        "query": "tehran azadi",
+        "operator": "and"
+        }
+    }
+    }
+}
+    </code></pre>
+
+            <hr class="solid">
+            <code>
+                "fuzziness": 2,</br>
+                "operator": "and"
+            </code>
+            </br>
+            </br>
+            In the following example, add the fuzziness parameter, permitting a maximum of 2 edits per word, which
+            results in increasing the number of returned hits, while changing the relevance of the results.
+
+            it can get Tehran or Tehran in iran ...
+            <pre><code class="language-json query-code">
+GET /users/_search
+{
+    "query": {
+    "match": {
+        "address": {
+        "query": "tehran iran",
+        "fuzziness": 2, 
+        "operator": "and"
+        }
+    }
+    }
+}
+                    </code></pre>
+
+            <hr class="solid">
+
+            <code>
+                "minimum_should_match": 2,</br>
+                "operator": "or"
+            </code>
+            </br>
+            </br>
+            An optional parameter of type string that represents the minimum number of matching clauses for a document
+            to be returned.
+
+            minimum 2 words to be matched in this example
+            it can return docs with Tehran paris or Tehran iran or paris London ...
+
+            <pre><code class="language-json query-code">
+GET /users/_search
+{
+    "query": {
+    "match": {
+        "address": {
+        "query": "tehran iran paris london",
+        "minimum_should_match": 2, 
+        "operator": "or"
+        }
+    }
+    }
+}
+                    </code></pre>
+
+            <hr class="solid">
+            <h3 id="structure-of-bool-query">Structure of bool query</h3>
+
+            <p>structure of bool query</p>
+            <pre><code class="language-json query-code">
+"bool": {
+    "must": [],
+    "must_not": [],
+    "filter": [],
+    "should": [],
+    "minimum_should_match" : 1
+}
+            </code></pre>
+            <ul>
+                <li>OR is spelled should</li>
+                <li>AND is spelled must</li>
+                <li>NOR is spelled should_not</li>
+            </ul>
+            <hr class="solid">
+            <p>show usage of must and should example</p>
+            <p>following query will return users with firstName: hamed and his address is iran or france</p>
+            <p>and the sort will shuffle the order of docs</p>
+            <pre><code class="language-json query-code">
+GET /users/_search
+{
+    "query": {
+        "bool": {
+            "must": [
+                {
+                    "term": {"firstName": "hamed"}
+                },
+                {
+                    "bool": {
+                        "should": [
+                            {"term": {"address": "iran"}},
+                            {"term": {"address": "france"}}
+                        ]
+                    }
+                }
+            ]
+        }
+    },
+    "sort": {
+        "_script": {
+            "type": "number",
+            "script": {
+                "source": "Math.random()",
+                "lang": "painless"
+            },
+            "order": "asc"
+        }
+    }
+}
+                
+                            </code></pre>
+            <hr class="solid">
+
+            <h3 id="match-phrase-query">Match phrase query</h3>
+            <p>
+                Word proximity is taken into account by the match phrase query, which requires the words to be located
+                within a customizable "slop" or distance. The match phrase example below searches the people index for
+                users with the phrase "john" in their firstName.
+            </p>
+
+            <pre><code class="language-json query-code">
+GET /users/_search
+{
+  "query": {
+    "match_phrase": {
+      "firstName": "Max"
+    }
+  }
+}
+                    </code></pre>
+
+            <hr class="solid">
+
+            <h4>Note: Phrase matching cannot be utilized with fuzzy search.</h4>
+            </br>
+            <p>
+                The following query will match:
+                it will return tehran country iran, tehran everything iran
+                but it don't return tehran some word iran
+            </p>
+            <pre><code class="language-json query-code">
+GET /users/_search
+{
+  "query": {
+    "match_phrase": {
+      "address": {
+        "query": "Tehran iran",
+        "slop": 1 
+      }
+    }
+  }
+}
+                    </code></pre>
+
+            <hr class="solid">
+            <h3 id="multi-match-query">Multi match query</h3>
+            <p>the following search to lookup a single word over several fields.</p>
+            <pre><code class="language-json query-code">
+GET /users/_search
+{
+    "query": {
+    "multi_match": {
+        "query": "william",
+        "fields": [
+        "address",
+        "firstName",
+        "lastName"
+        ]
+    }
+    }
+}
+                                    </code></pre>
+
+            <hr class="solid">
+            <p>Wildcards can be used to specify fields as shown in the example below (*Name)</p>
+            <pre><code class="language-json query-code">
+GET /users/_search
+{
+    "query": {
+    "multi_match" : {
+        "query":    "william",
+        "fields": [ "address", "*Name" ] 
+    }
+    }
+}
+            </code></pre>
+            <hr class="solid">
+            <p>The caret (^) notation can be used to boost scores of specific fields. In the following example, the
+                address field receives a boost of 2.
+            </p>
+            <pre><code class="language-json query-code">
+GET /users/_search
+{
+    "query": {
+    "multi_match": {
+        "query": "william",
+        "fields": [
+        "address^2",
+        "firstName"
+        ]
+    }
+    }
+}
+                            </code></pre>
+            <hr class="solid">
+
+            <p>*. * extracting all fields from the mapping that are appropriate for term queries, in addition to
+                filtering the metadata fields.</p>
+            <pre><code class="language-json query-code">
+GET /users/_search
+{
+    "query": {
+    "multi_match": {
+        "query": "william",
+        "fields": [
+        "*.*"
+        ]
+    }
+    }
+}
+                </code></pre>
+            <hr class="solid">
+
+            <p>- Best fields: This setting finds documents that match any field while using the score from the field
+                with the highest score. The best fields type is the most useful when looking for numerous terms that are
+                most frequently found in a single field. "android programming" in a single field is more pertinent than
+                android in one field and programming in another, as seen in the example below.</p>
+            <pre><code class="language-json query-code">
+GET /users/_search
+{
+    "query": {
+        "multi_match": {
+        "query": "android programming",
+        "type":       "best_fields",
+        "fields": [
+            "skills",
+            "abilites"
+        ],
+        "tie_breaker": 0.3
+        }
+    }
+}                    
+                                    </code></pre>
+            <hr class="solid">
+            <p>The primary field may contain stems, synonyms, and terms without diacritics, as demonstrated in the
+                example below. Shingles may be in a third field, and the original phrases may be in a second field. By
+                combining the scores from the three fields, which enables the matching of as many documents with the
+                primary field as is possible, the most comparable results are pushed to the top of the list using the
+                second and third fields.</p>
+            <pre><code class="language-json query-code">
+GET /users/_search
+{
+  "query": {
+    "multi_match" : {
+      "query":      "data mining",
+      "type":       "most_fields",
+      "fields":     [ "title","title.shingles", "title.original" ]
+    }
+  }
+}
+                                    </code></pre>
+            <hr class="solid">
+            <p>– Cross_fields: All fields with the same analyzer should be treated as if they were one big field.</p>
+            <pre><code class="language-json query-code">
+GET /users/_search
+{
+    "query": {
+    "multi_match" : {
+        "query":      "william max",
+        "type":       "cross_fields",
+        "fields":     [ "firstName", "lastName" ],
+        "operator":   "and"
+    }
+    }
+}
+                                </code></pre>
+
+            <hr class="solid">
+            <h3 id="working-with-array">Working with Array</h3>
+            <p>1- Querying for documents with a specific ability type:</br>This query will retrieve all documents that
+                have an ability with the type "strength" in the "abilities" nested field.</p>
+
+            <pre><code class="language-json query-code">
+GET /users/_search
+{
+    "query": {
+    "nested": {
+        "path": "abilities",
+        "query": {
+        "bool": {
+            "must": [
+            {"match": {"abilities.type": "strength"}}
+            ]
+        }
+        }
+    }
+    }
+}
+                                </code></pre>
+            <hr class="solid">
+            <p>Querying for documents with abilities that have a certain percent value:</br>This query will retrieve all
+                documents that have an ability in the "abilities" nested field with a percent value greater than or
+                equal to 80.
+            </p>
+            <pre><code class="language-json query-code">
+GET /users/_search
+{
+    "query": {
+        "nested": {
+        "path": "abilities",
+        "query": {
+            "bool": {
+            "must": [
+                {"range": {"abilities.percent": {"gte": 80}}}
+             ]
+            }
+         }
+        }
+     }
+    }
+                                                </code></pre>
+            <hr class="solid">
+            <p>Sorting documents by province rank of their abilities:</br>This query will retrieve all documents that
+                have an ability in the "abilities" nested field and sort them by the province rank of the ability in
+                ascending order.
+            </p>
+            <pre><code class="language-json query-code">
+GET /users/_search
+{
+    "query": {
+        "nested": {
+            "path": "abilities",
+            "query": {
+            "match_all": {}
+            }
+        }
+    },
+    "sort": [
+        {"abilities.provinceRank": {"order": "asc"}}
+    ]
+}
+            </code></pre>
+            <hr class="solid">
+            <p>To add an additional condition to your query, you can use the bool query with a must clause to require
+                that both the nested query and the new query condition must match in order for the document to be
+                retrieved.</br>This query will retrieve all documents that have an ability percent greater than 60 and
+                less than 95 in the "abilities" nested field and an address field that contains both "tehran" and
+                "Iran".
+            </p>
+            <pre><code class="language-json query-code">
+GET /users/_search
+{
+  "query": {
+    "bool": {
+      "must": [
+        {
+          "nested": {
+            "path": "abilities",
+            "query": {
+              "bool": {
+                "must": [
+                    {"range": {"abilities.percent": {"gte": 60,"lte": 95}}}
+                  ]
+              }
+            }
+          }
+        },
+        {
+          "bool": {
+            "must": [
+              {"match_phrase": {"address": "tehran"}},
+              {"match_phrase": {"address": "iran"}}
+            ]
+          }
+        }
+      ]
+    }
+  }
+}
+                            </code></pre>
+            <hr class="solid">
+            <p>it is possible to sort every object in the abilities array in ascending order based on the value of the
+                provinceRank field. To achieve this, you can add the inner_hits parameter to the nested query and
+                specify a sort order for the inner hits. Here's an example query that should give you the desired
+                result:</br>This query will retrieve all documents that have an ability in the abilities nested field
+                and sort each ability object within the array by the provinceRank field in ascending order. The inner
+                hits will be returned as a separate response section, which you can access using the hits.inner_hits
+                field in your search response.
+            </p>
+            <pre><code class="language-json query-code">
+GET /users/_search
+{
+    "query": {
+        "nested": {
+        "path": "abilities",
+        "query": {
+            "match_all": {}
+        },
+        "inner_hits": {
+            "sort": [
+            {"provinceRank": {"order": "asc"}}
+            ]
+         }
+        }
+    }
+}
+                            </code></pre>
+            <hr class="solid">
+            <p>combine Q19 and Q17</p>
+            <pre><code class="language-json query-code">
+GET /users/_search
+{
+    "query": {
+        "nested": {
+        "path": "abilities",
+        "query": {
+            "match_all": {}
+        },
+        "inner_hits": {
+            "sort": [
+                {"provinceRank": {"order": "asc"}}
+                ]
+            }
+        }
+    }
+}
+             </code></pre>
+
+            <hr class="solid">
+            <p>if we are looking for someone has python ability and the percent of his/her ability between 80 and 90 we
+                can use following query:</p>
+            <pre><code class="language-json query-code">
+GET /users/_search
+{
+    "query": {
+    "nested": {
+        "path": "abilities",
+        "query": {
+        "bool": {
+            "must": [
+            {
+                "match_phrase": {
+                "abilities.title": "python"
+                }
+            },
+            {
+            "range": {
+                "abilities.percent": {
+                "gte": 80,
+                "lte": 90
+                }
+            }
+            }
+            ]
+        }
+        }
+    }
+    }
+}
+            </code></pre>
+            <hr class="solid">
+
+            <p>below query look like last query but we said find everyone that exist in iran</p>
+            <pre><code class="language-json query-code">
+GET /users/_search
+{
+  "query": {
+    "bool": {
+      "must": [
+        {
+          "nested": {
+            "path": "abilities",
+            "query": {
+              "bool": {
+                "must": [
+                  {
+                    "match_phrase": {
+                      "abilities.title": "python"
+                    }
+                  },
+                  {
+                    "range": {
+                      "abilities.percent": {
+                        "gte": 80,
+                        "lte": 90
+                      }
+                    }
+                  }
+                ],
+                "must_not": [
+                  {
+                    "match_phrase": {
+                      "abilities.title": "GitLab"
+                    }
+                  }
+                ]
+              }
+            }
+          }
+        },
+        {
+          "match": {
+            "address": "iran"
+          }
+        }
+      ]
+    }
+  }
+}
+                            </code></pre>
+            <hr class="solid">
+        </div>
+    </div>
+
+    </div>
+    <script>
+        // get all the menu items
+        const menuItems = document.querySelectorAll('.menu-item');
+
+        // add click event listener to each menu item
+        menuItems.forEach(item => {
+            item.addEventListener('click', (event) => {
+                // prevent default link behavior
+                event.preventDefault();
+
+                // get the target element from the href attribute
+                const target = event.target.getAttribute('href');
+
+                // scroll to the target element
+                document.querySelector(target).scrollIntoView({
+                    behavior: 'smooth'
+                });
+            });
+        });
+    </script>
+
+    <script src="https://cdn.jsdelivr.net/npm/toastify-js"></script>
+
+    <script>
+        const queryCodeBlocks = document.querySelectorAll('.query-code');
+
+        queryCodeBlocks.forEach((block) => {
+            block.addEventListener('click', () => {
+                const code = block.innerText.trim();
+                navigator.clipboard.writeText(code)
+                    .then(() => {
+                        // show a toast message when the code is copied
+                        Toastify({
+                            text: 'Code copied to clipboard!',
+                            duration: 3000,
+                            gravity: 'bottom',
+                            position: 'right',
+                            backgroundColor: 'blue',
+                            stopOnFocus: true,
+                            onClick: function () {
+                                this.hide();
+                            }
+                        }).showToast();
+                    })
+                    .catch((err) => {
+                        console.error('Failed to copy code: ', err);
+                    });
+            });
+        });
+    </script>
+    <footer>
+        <p>&copy; 2023 <a href="https://github.com/pariazar">Pariazar</a>. All rights reserved.</p>
+    </footer>
+
+</body>
+
+</html>
