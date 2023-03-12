@@ -1,0 +1,264 @@
+<!-- This is educational tool for learning es queries (developed by pariazar)-->
+<!DOCTYPE html>
+<html>
+
+<head>
+    <title>ElasticLab Panel</title>
+    <link rel="icon" href="images/favicon.ico" type="image/png">
+
+    <link rel="stylesheet" href="./css/chat.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/prism/1.24.1/themes/prism.min.css" />
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/toastify-js/src/toastify.min.css">
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.24.1/prism.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.24.1/components/prism-json.min.js"></script>
+
+</head>
+
+<body>
+    <div class="container">
+        <div class="panel">
+            <p>Hello, I'm ElasticLab. How can I help you today?</p>
+        </div>
+        <div class="input">
+            <input type="text" id="input-box" placeholder="Type your message here...">
+            <button id="send-btn">Send</button>
+        </div>
+    </div>
+
+    <script>
+        const messages = [
+            "I'm sorry, I didn't understand. Could you please rephrase your question?",
+            "Sure, let's build a ElasticSearch v8 query. What index name are you querying?",
+            "Great! Please send me sample of your data to detect structure like following \n {[firstName: 'name'}]?",
+            "Do you want to use to filter the results? (yes/no)",
+            "Please Enter your conditions as following firstName=max and lastName=amin?",
+            "Here's your ElasticSearch query:",
+            "Do you want to sort the results? If so, by which field?",
+            "How many results do you want to retrieve?",
+            "Do you want to use the aggregation pipeline? (yes/no)",
+            "What are the stages of your aggregation pipeline?",
+        ];
+
+        const panel = document.querySelector(".panel");
+        const inputBox = document.querySelector("#input-box");
+        const sendBtn = document.querySelector("#send-btn");
+
+        let state = {
+            step: 0,
+            indexName: "",
+            sampleData: "",
+            hasFilter: false,
+            filter: "",
+            sortField: "",
+            limit: "",
+            useAggregation: false,
+            aggregationStages: [],
+        };
+
+        sendBtn.addEventListener("click", () => {
+            if (inputBox.value.trim() !== "") {
+                const date = new Date();
+                const year = date.getFullYear();
+                const month = date.getMonth() + 1;
+                const day = date.getDate();
+                const hour = date.getHours();
+                const minute = date.getMinutes();
+
+                const withSlashes = [year, month, day].join('/');
+
+                panel.innerHTML += `<p>${withSlashes + ' - ' + [hour, minute].join(':')} <strong>You:</strong> ${inputBox.value.trim()}</p>`;
+                const response = getResponse(inputBox.value.trim()); panel.lastElementChild.innerHTML += '\n\n\n'
+                inputBox.value = "";
+                panel.scrollTop = panel.scrollHeight;
+                if (response.includes("Here's your ElasticSearch query:")) {
+                    panel.innerHTML += `<pre><code></code></pre>`;
+                    panel.lastElementChild.innerHTML += response;
+                    panel.lastElementChild.classList.add('codeQuery');
+                }
+                else {
+                    setTimeout(() => {
+                        let i = 0;
+                        const typingEffect = setInterval(() => {
+                            if (i < response.length) {
+                                panel.lastElementChild.innerHTML += response.charAt(i);
+                                i++;
+                            } else {
+                                clearInterval(typingEffect);
+                            }
+                        }, 50);
+                        panel.innerHTML += `<p></p>`;
+                        panel.scrollTop = panel.scrollHeight;
+                    }, 500);
+                }
+            }
+        });
+
+        inputBox.addEventListener("keydown", (e) => {
+            if (e.key === "Enter") {
+                sendBtn.click();
+            }
+        });
+
+        function tryAgain(message, step) {
+            if (message === 'try again') return 3;
+            return step;
+        }
+
+        function queryBuilder(filter) {
+            const finalQuery = {
+                query: {
+                    bool: {
+                        must: [],
+                    }
+                }
+            };
+
+
+            if (filter.includes(' and ')) {
+                const myTerms = filter.split('and');
+                if (myTerms.length > 0) {
+                    for (const term of myTerms) {
+                        finalQuery.query.bool.must.push({
+                            "term": { [term.split('=')[0].trim()]: term.split('=')[1].split('or')[0].trim() }
+                        })
+                    }
+                }
+            }
+            if (filter.includes(' or ')) {
+                let myTerms = filter.split('or');
+                if (myTerms.length > 0) {
+                    finalQuery.query.bool.must.push({
+                        bool: {
+                            should: []
+                        }
+                    })
+                    for (const term of myTerms) {
+                        if (!term.split('=')[1].includes('and'))
+                            finalQuery.query.bool.must[finalQuery.query.bool.must.length - 1].bool.should.push({
+                                "term": { [term.split('=')[0].trim()]: term.split('=')[1].trim() }
+                            })
+                    }
+                }
+            }
+
+            return finalQuery;
+        }
+        function getResponse(message) {
+            if (state.step === 0) {
+                state.collection = message;
+                state.step++;
+                return messages[1];
+            } else if (state.step === 1) {
+                state.step++;
+                state.indexName = message;
+                return messages[2];
+            } else if (state.step === 2) {
+                //support data structure in array obj or single obj 
+                let targetObj;
+                if (Array.isArray(message)) targetObj = message[0];
+                else targetObj = message;
+
+                state.sampleData = message;
+
+                state.step++;
+                return messages[3];
+            } else if (state.step === 3) {
+                if (message.toLowerCase() === "yes") {
+                    state.hasFilter = true;
+                }
+                state.step++;
+                return messages[4];
+            } else if (state.step === 4) {
+                state.filter = message;
+                state.step++;
+                if (state.hasFilter) {
+                    const query = `\nGET /${state.indexName}/_search\n${Prism.highlight(JSON.stringify(queryBuilder(state.filter)), Prism.languages.json, 'json')}`;
+                    return `Here's your ElasticSearch query:\n${query}`;
+                }
+
+                return "goodbye";
+            } else if (state.step === 5) {
+                state.step = tryAgain(message, state.step);
+
+                if (state.step === 3) return "i will try:"
+                state.step++;
+                return 'messages[7]';
+            } else if (state.step === 6) {
+                if (message.toLowerCase() !== "done") {
+                    state.aggregationStages.push(message);
+                    return "What's the next stage? (type 'done' when finished)";
+                } else {
+                    state.step++;
+                    return messages[8] + buildQuery();
+                }
+            } else {
+                return messages[0];
+            }
+        }
+
+        function buildQuery() {
+            let query = "";
+            if (state.fields !== "") {
+                query = `db.${state.collection}.aggregate([`;
+                query += `{ $project: { ${state.fields} } },`;
+                if (state.filter !== "") {
+                    query += `{ $match: { ${state.filter} } },`;
+                }
+                if (state.sortField !== "") {
+                    query += `{ $sort: { "${state.sortField}": 1 } },`;
+                }
+                if (state.limit !== "") {
+                    query += `{ $limit: ${state.limit} },`;
+                }
+                // Remove trailing comma and close pipeline
+                query = query.slice(0, -1);
+                query += "]);";
+            } else {
+                query = `db.${state.collection}.find({`;
+                if (state.filter !== "") {
+                    query += `${state.filter}, `;
+                }
+                if (state.sortField !== "") {
+                    query += `sort: { "${state.sortField}": 1 }, `;
+                }
+                if (state.limit !== "") {
+                    query += `limit: ${state.limit}`;
+                }
+                query += "});";
+            }
+            return query;
+        }
+
+
+    </script>
+    <script>
+        const queryCodeBlocks = document.querySelectorAll('.codeQuery');
+
+        queryCodeBlocks.forEach((block) => {
+            block.addEventListener('click', () => {
+                const code = block.innerText.trim();
+                navigator.clipboard.writeText(code)
+                    .then(() => {
+                        // show a toast message when the code is copied
+                        Toastify({
+                            text: 'Code copied to clipboard!',
+                            duration: 3000,
+                            gravity: 'bottom',
+                            position: 'right',
+                            backgroundColor: 'blue',
+                            stopOnFocus: true,
+                            onClick: function () {
+                                this.hide();
+                            }
+                        }).showToast();
+                    })
+                    .catch((err) => {
+                        console.error('Failed to copy code: ', err);
+                    });
+            });
+        });
+    </script>
+</body>
+
+</html>
