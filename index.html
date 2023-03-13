@@ -51,6 +51,7 @@
             hasFilter: false,
             filter: "",
             sortField: "",
+            sortDirection: "",
             limit: "",
             useAggregation: false,
             aggregationStages: [],
@@ -100,50 +101,131 @@
             }
         });
 
-        function tryAgain(message, step) {
-            if (message === 'try again') return 3;
+        function tryAgain(message, step, nextState) {
+            if (message === 'try again') return nextState;
             return step;
         }
 
-        function queryBuilder(filter) {
+        function queryBuilder(filter, sortField, sortDirection) {
             const finalQuery = {
                 query: {
                     bool: {
                         must: [],
-                    }
-                }
+                    },
+                },
             };
-
 
             if (filter.includes(' and ')) {
                 const myTerms = filter.split('and');
                 if (myTerms.length > 0) {
                     for (const term of myTerms) {
-                        finalQuery.query.bool.must.push({
-                            "term": { [term.split('=')[0].trim()]: term.split('=')[1].split('or')[0].trim() }
-                        })
+                        if (term.includes('>=')) {
+                            finalQuery.query.bool.must.push({
+                                range: { [term.split('>=')[0].trim()]: { gte: term.split('>=')[1].trim() } },
+                            });
+                        } else if (term.includes('<=')) {
+                            finalQuery.query.bool.must.push({
+                                range: { [term.split('<=')[0].trim()]: { lte: term.split('<=')[1].trim() } },
+                            });
+                        } else if (term.includes('>')) {
+                            finalQuery.query.bool.must.push({
+                                range: { [term.split('>')[0].trim()]: { gt: term.split('>')[1].trim() } },
+                            });
+                        } else if (term.includes('<')) {
+                            finalQuery.query.bool.must.push({
+                                range: { [term.split('<')[0].trim()]: { lt: term.split('<')[1].trim() } },
+                            });
+                        } else {
+                            finalQuery.query.bool.must.push({
+                                term: { [term.split('=')[0].trim()]: term.split('=')[1].trim() },
+                            });
+                        }
                     }
                 }
             }
+
             if (filter.includes(' or ')) {
                 let myTerms = filter.split('or');
                 if (myTerms.length > 0) {
                     finalQuery.query.bool.must.push({
                         bool: {
-                            should: []
-                        }
-                    })
+                            should: [],
+                        },
+                    });
                     for (const term of myTerms) {
-                        if (!term.split('=')[1].includes('and'))
+                        if (!term.split('=')[1].includes('and')) {
+                            if (term.includes('>=')) {
+                                finalQuery.query.bool.must[finalQuery.query.bool.must.length - 1].bool.should.push({
+                                    range: { [term.split('>=')[0].trim()]: { gte: term.split('>=')[1].trim() } },
+                                });
+                            } else if (term.includes('<=')) {
+                                finalQuery.query.bool.must[finalQuery.query.bool.must.length - 1].bool.should.push({
+                                    range: { [term.split('<=')[0].trim()]: { lte: term.split('<=')[1].trim() } },
+                                });
+                            } else if (term.includes('>')) {
+                                finalQuery.query.bool.must[finalQuery.query.bool.must.length - 1].bool.should.push({
+                                    range: { [term.split('>')[0].trim()]: { gt: term.split('>')[1].trim() } },
+                                });
+                            } else if (term.includes('<')) {
+                                finalQuery.query.bool.must[finalQuery.query.bool.must.length - 1].bool.should.push({
+                                    range: { [term.split('<')[0].trim()]: { lt: term.split('<')[1].trim() } },
+                                });
+                            } else {
+                                finalQuery.query.bool.must[finalQuery.query.bool.must.length - 1].bool.should.push({
+                                    term: { [term.split('=')[0].trim()]: term.split('=')[1].trim() },
+                                });
+                            }
+                        }
+                        else {
+                            const innerTerms = term.split('=');
+                            const outerTerm = innerTerms[0].trim();
+                            const innerValues = innerTerms[1].split('and');
+                            const shouldArr = [];
+                            for (const value of innerValues) {
+                                if (value.includes('>=')) {
+                                    shouldArr.push({
+                                        "range": { [outerTerm]: { "gte": value.split('>=')[1].trim() } }
+                                    })
+                                } else if (value.includes('<=')) {
+                                    shouldArr.push({
+                                        "range": { [outerTerm]: { "lte": value.split('<=')[1].trim() } }
+                                    })
+                                } else if (value.includes('>')) {
+                                    shouldArr.push({
+                                        "range": { [outerTerm]: { "gt": value.split('>')[1].trim() } }
+                                    })
+                                } else if (value.includes('<')) {
+                                    shouldArr.push({
+                                        "range": { [outerTerm]: { "lt": value.split('<')[1].trim() } }
+                                    })
+                                } else {
+                                    shouldArr.push({
+                                        "term": { [outerTerm]: value.trim() }
+                                    })
+                                }
+                            }
                             finalQuery.query.bool.must[finalQuery.query.bool.must.length - 1].bool.should.push({
-                                "term": { [term.split('=')[0].trim()]: term.split('=')[1].trim() }
+                                bool: {
+                                    must: shouldArr
+                                }
                             })
+                        }
                     }
                 }
+            }
+            // add sorting
+            if (sortField && sortDirection) {
+                finalQuery.sort = [{
+                    [sortField]: {
+                        order: sortDirection.toLowerCase(),
+                    },
+                },
+                ];
             }
 
             return finalQuery;
         }
+
         function getResponse(message) {
             if (state.step === 0) {
                 state.collection = message;
@@ -179,20 +261,31 @@
 
                 return "goodbye";
             } else if (state.step === 5) {
-                state.step = tryAgain(message, state.step);
+                state.step = tryAgain(message, state.step, 3);
 
-                if (state.step === 3) return "i will try:"
+                if (state.step === 3) return getResponse("i will try:");
                 state.step++;
-                return 'messages[7]';
+                return 'do want to continue and complete your query? (yes/no)';
             } else if (state.step === 6) {
+
+                state.step++;
                 if (message.toLowerCase() !== "done") {
-                    state.aggregationStages.push(message);
-                    return "What's the next stage? (type 'done' when finished)";
+                    return "Do you want to add sort into your query? if yes enter your sort field and direction like following: _id:asc";
                 } else {
-                    state.step++;
-                    return messages[8] + buildQuery();
+                    const query = `\nGET /${state.indexName}/_search\n${Prism.highlight(JSON.stringify(queryBuilder(state.filter)), Prism.languages.json, 'json')}`;
+                    return `Here's your ElasticSearch query:\n${query}`;
                 }
-            } else {
+            }
+            else if (state.step === 7) {
+                state.step = tryAgain(message, state.step, 6);
+                if (state.step === 6) return getResponse("i will try:");
+
+                state.sortField = message.split(':')[0];
+                state.sortDirection = message.split(':')[1];
+                const query = `\nGET /${state.indexName}/_search\n${Prism.highlight(JSON.stringify(queryBuilder(state.filter, state.sortField, state.sortDirection)), Prism.languages.json, 'json')}`;
+                return `Here's your ElasticSearch query:\n${query}`;
+            }
+            else {
                 return messages[0];
             }
         }
